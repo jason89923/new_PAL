@@ -14,13 +14,16 @@ using namespace std;
 class Done {
 };
 
-class Lexical_Error {
+class OK {
 };
 
-class Syntactical_Error {
+class Lexical_Error : public exception {
 };
 
-class Semantic_Error {
+class Syntactical_Error : public exception {
+};
+
+class Semantic_Error : public exception {
 };
 
 class Token {
@@ -75,6 +78,17 @@ class Token {
         return true;
     }  // IsLegalIdentifier()
 
+    static bool isDelimiter(const string& str) {
+        if (str == "(" || str == ")" || str == "[" || str == "]" || str == "{" || str == "}" || str == "+" || str == "-" || str == "*" || str == "/" ||
+            str == "%" || str == "^" || str == ">" || str == "<" || str == ">=" || str == "<=" || str == "==" || str == "!=" || str == "&" || str == "|" ||
+            str == "!" || str == "&&" || str == "||" || str == "+=" || str == "-=" || str == "*=" || str == "/=" || str == "%=" || str == "++" ||
+            str == "--" || str == ">>" || str == "<<" || str == ";" || str == "," || str == "?" || str == ":" || str == "=") {
+            return true;
+        }
+
+        return false;
+    }
+
     bool IsDigit(const string& str) {
         int numOfDecimalPoint = 0;
         for (int i = 0; i < str.length(); i++) {
@@ -90,17 +104,6 @@ class Token {
         return true;
     }  // IsDigit()
 
-    static bool isDelimiter(const string& str) {
-        if (str == "(" || str == ")" || str == "[" || str == "]" || str == "{" || str == "}" || str == "+" || str == "-" || str == "*" || str == "/" ||
-            str == "%" || str == "^" || str == ">" || str == "<" || str == ">=" || str == "<=" || str == "==" || str == "!=" || str == "&" || str == "|" ||
-            str == "!" || str == "&&" || str == "||" || str == "+=" || str == "-=" || str == "*=" || str == "/=" || str == "%=" || str == "++" ||
-            str == "--" || str == ">>" || str == "<<" || str == ";" || str == "," || str == "?" || str == ":" || str == "=") {
-            return true;
-        }
-
-        return false;
-    }
-
     friend class Reader;
 };
 
@@ -108,7 +111,7 @@ class Reader {
    private:
     vector<Token> mBuffer;
     map<string, string> mDelimiterTable;
-    int currentLine = 1;
+    int currentLine;
 
     /*separate line to tokens*/
     void Transform_to_tokens(const string& line) {
@@ -212,6 +215,10 @@ class Reader {
     }
 
    public:
+    Reader() {
+        Reset();
+    }
+
     static string GetLine() {
         string line;
         char ch = getchar();
@@ -230,7 +237,16 @@ class Reader {
 
         Token token = mBuffer[0];
         mBuffer.erase(mBuffer.begin());
+        if (token.mType == "404") {
+            cout << "Line " << currentLine << " : unrecognized token with first char : '" << token.mString[0] << "'";
+            throw Lexical_Error();
+        }
         return token;
+    }
+
+    void Reset() {
+        currentLine = 1;
+        mBuffer.clear();
     }
 };
 
@@ -238,7 +254,7 @@ class Recursive_descent_parser {
    private:
     map<string, string> mGrammarTable;
     map<char, char> mBrackets;
-    int currentIndex;
+    int mCurrentIndex;
 
     /*將文法規則拆解一層*/
     void Dismantling_grammar(const string& complicated_grammar, vector<string>& mQueue) {
@@ -297,29 +313,29 @@ class Recursive_descent_parser {
         mBrackets['('] = ')';
 
         mGrammarTable["user_input"] = "definition | statement";
-        mGrammarTable["definition"] = "( 'void' IDENTIFIER function_definition_without_ID) | ";
-        mGrammarTable["definition"] += "( type_specifier IDENTIFIER function_definition_or_declarators )";
+        mGrammarTable["definition"] = "( 'void' identifier function_definition_without_ID) | ";
+        mGrammarTable["definition"] += "( type_specifier identifier function_definition_or_declarators )";
         mGrammarTable["type_specifier"] = " 'int' | 'char' | 'float' | 'string' | 'bool' ";
         mGrammarTable["function_definition_or_declarators"] = "function_definition_without_ID";
         mGrammarTable["function_definition_or_declarators"] += " | rest_of_declarators";
-        mGrammarTable["rest_of_declarators"] = "[ '[' CONSTANT ']' ] { ',' IDENTIFIER [ '[' CONSTANT ']' ] } ';'";
+        mGrammarTable["rest_of_declarators"] = "[ '[' constant ']' ] { ',' identifier [ '[' constant ']' ] } ';'";
         mGrammarTable["function_definition_without_ID"] = " '(' [ 'void' | formal_parameter_list ] ')'";
         mGrammarTable["function_definition_without_ID"] += " compound_statement";
-        mGrammarTable["formal_parameter_list"] = "type_specifier [ '&' ] IDENTIFIER [ '[' CONSTANT ']' ]";
+        mGrammarTable["formal_parameter_list"] = "type_specifier [ '&' ] identifier [ '[' constant ']' ]";
         mGrammarTable["formal_parameter_list"] += " { ',' type_specifier [ '&' ] ";
-        mGrammarTable["formal_parameter_list"] += "IDENTIFIER [ '[' CONSTANT ']' ] }";
+        mGrammarTable["formal_parameter_list"] += "identifier [ '[' constant ']' ] }";
         mGrammarTable["compound_statement"] = "'{' { declaration | statement } '}'";
-        mGrammarTable["declaration"] = "type_specifier IDENTIFIER rest_of_declarators";
+        mGrammarTable["declaration"] = "type_specifier identifier rest_of_declarators";
         mGrammarTable["statement"] = " ';' | ( expression ';' ) | ( 'return' [ expression ] ';' )";
         mGrammarTable["statement"] += " | compound_statement | ( 'if' '(' expression ')' statement";
         mGrammarTable["statement"] += " [ 'else' statement ] ) | ( 'while' '(' expression ')' ";
         mGrammarTable["statement"] += "statement ) | ( 'do' statement 'while' '(' expression ')' ';' )";
         mGrammarTable["expression"] = "basic_expression { ',' basic_expression }";
-        mGrammarTable["basic_expression"] = "( IDENTIFIER rest_of_Identifier_started_basic_exp )";
-        mGrammarTable["basic_expression"] += " | ( ( '++' | '--' ) IDENTIFIER ";
+        mGrammarTable["basic_expression"] = "( identifier rest_of_Identifier_started_basic_exp )";
+        mGrammarTable["basic_expression"] += " | ( ( '++' | '--' ) identifier ";
         mGrammarTable["basic_expression"] += "rest_of_PPMM_Identifier_started_basic_exp )";
         mGrammarTable["basic_expression"] += " | ( sign { sign } signed_unary_exp romce_and_romloe ) | ";
-        mGrammarTable["basic_expression"] += "( ( CONSTANT | ( '(' expression ')' ) ) romce_and_romloe )";
+        mGrammarTable["basic_expression"] += "( ( constant | ( '(' expression ')' ) ) romce_and_romloe )";
         mGrammarTable["rest_of_Identifier_started_basic_exp"] = "( '(' [ actual_parameter_list ] ')' ";
         mGrammarTable["rest_of_Identifier_started_basic_exp"] += "romce_and_romloe ) | ";
         mGrammarTable["rest_of_Identifier_started_basic_exp"] += "( [ '[' expression ']' ] ( ( ";
@@ -357,19 +373,28 @@ class Recursive_descent_parser {
         mGrammarTable["maybe_mult_exp"] = "unary_exp rest_of_maybe_mult_exp";
         mGrammarTable["rest_of_maybe_mult_exp"] = "{ ( '*' | '/' | '%' ) unary_exp }";
         mGrammarTable["unary_exp"] = "( sign { sign } signed_unary_exp ";
-        mGrammarTable["unary_exp"] += ") | unsigned_unary_exp | ( ( '++' | '--' ) IDENTIFIER ";
+        mGrammarTable["unary_exp"] += ") | unsigned_unary_exp | ( ( '++' | '--' ) identifier ";
         mGrammarTable["unary_exp"] += "[ '[' expression ']' ] )";
-        mGrammarTable["signed_unary_exp"] = "( IDENTIFIER [ ( '(' [ actual_parameter_list ] ')' )";
+        mGrammarTable["signed_unary_exp"] = "( identifier [ ( '(' [ actual_parameter_list ] ')' )";
         mGrammarTable["signed_unary_exp"] += " | ( '[' expression ']' ) ] ) | ";
-        mGrammarTable["signed_unary_exp"] += "CONSTANT | ( '(' expression ')' )";
-        mGrammarTable["unsigned_unary_exp"] = "( IDENTIFIER [ ( '(' [ actual_parameter_list ] ')' )";
+        mGrammarTable["signed_unary_exp"] += "constant | ( '(' expression ')' )";
+        mGrammarTable["unsigned_unary_exp"] = "( identifier [ ( '(' [ actual_parameter_list ] ')' )";
         mGrammarTable["unsigned_unary_exp"] += " | ( [ '[' expression ']' ] [ ( '++' | '--' ";
-        mGrammarTable["unsigned_unary_exp"] += ") ] ) ] ) | CONSTANT | ( '(' expression ')' )";
+        mGrammarTable["unsigned_unary_exp"] += ") ] ) ] ) | constant | ( '(' expression ')' )";
     }
 
-    bool grammar_check(const vector<Token>& tokenList) {
-        currentIndex = 0;
-        Is_mach_rule(tokenList, "user_input");
+    bool Is_completed_expression(const vector<Token>& tokenList) {
+        mCurrentIndex = 0;
+        try {
+            if (!Is_mach_rule(tokenList, "user_input")) {
+                cout << "Line " << tokenList[mCurrentIndex].mLine << " : unexpected token : '" << tokenList[mCurrentIndex].mString << "'" << endl;
+                throw Syntactical_Error();
+            }
+        } catch (const OK& ok) {
+            return false;
+        }
+
+        return true;
     }
 
    private:
@@ -377,7 +402,7 @@ class Recursive_descent_parser {
         vector<string> dismantled_grammar_list;
         map<string, string>::iterator iterator = mGrammarTable.find(rule);
         if (iterator == mGrammarTable.end()) {
-            Dismantling_grammar(iterator->first, dismantled_grammar_list);
+            Dismantling_grammar(rule, dismantled_grammar_list);
         } else {
             Dismantling_grammar(iterator->second, dismantled_grammar_list);
         }
@@ -393,11 +418,84 @@ class Recursive_descent_parser {
 
         if (rule_attribute == "sequence") {
             for (int i = 0; i < dismantled_grammar_list.size(); i++) {
+                if (!Is_mach_single_rule(tokenList, dismantled_grammar_list[i])) {
+                    return false;
+                }
             }
+
+            return true;
         } else {
             for (int i = 0; i < dismantled_grammar_list.size(); i++) {
+                int preIndex = mCurrentIndex;
+                if (Is_mach_single_rule(tokenList, dismantled_grammar_list[i])) {
+                    return true;
+                } else {
+                    if (preIndex != mCurrentIndex) {
+                        return false;
+                    }
+                }
+            }
+
+            return false;
+        }
+    }
+
+    bool Is_mach_single_rule(const vector<Token>& tokenList, const string& single_rule) {
+        int situation = 0;
+        if (mBrackets.find(single_rule[0]) != mBrackets.end()) {
+            situation = 1;
+        } else if (mGrammarTable.find(single_rule) != mGrammarTable.end()) {
+            situation = 2;
+        } else {
+            situation = 3;
+        }
+
+        if (situation == 1 || situation == 2) {
+            int preIndex = mCurrentIndex;
+            string preprocessed_rule = (situation == 1) ? single_rule.substr(1, single_rule.length() - 2) : single_rule;
+            bool isMachRule = Is_mach_rule(tokenList, preprocessed_rule);
+            char first_char = single_rule[0];
+            if (first_char == '{') {
+                while (isMachRule) {
+                    preIndex = mCurrentIndex;
+                    isMachRule = Is_mach_rule(tokenList, preprocessed_rule);
+                }
+
+                if (preIndex == mCurrentIndex) {
+                    return true;
+                } else {
+                    return false;
+                }
+            } else if (first_char == '[') {
+                if (isMachRule) {
+                    return true;
+                } else {
+                    return preIndex == mCurrentIndex;
+                }
+            } else {
+                return isMachRule;
+            }
+        } else {
+            if (mCurrentIndex == tokenList.size()) {
+                throw OK();
+            } else {
+                if (Is_fit_type(tokenList[mCurrentIndex], single_rule)) {
+                    mCurrentIndex++;
+                    return true;
+                }
+
+                return false;
             }
         }
+    }
+
+    bool Is_fit_type(const Token& token, const string& type) {
+        if (type == "identifier" || type == "constant") {
+            return token.mType == type;
+        }
+
+        string literal_string = "'" + token.mString + "'";
+        return literal_string == type;
     }
 };
 
@@ -407,14 +505,15 @@ class InstructionCollector {
     Recursive_descent_parser recursive_descent_parser;
 
    public:
-    void GetNextInstruction(vector<Token>& instruction) {
+    void GetNextInstruction(vector<Token>& expression) {
         bool complete = false;
         while (!complete) {
             try {
-                instruction.push_back(reader.GetNextToken());
-                complete = recursive_descent_parser.grammar_check(instruction);
+                expression.push_back(reader.GetNextToken());
+                complete = recursive_descent_parser.Is_completed_expression(expression);
             } catch (const exception& e) {
-                cout << e.what() << endl;
+                reader.Reset();
+                expression.clear();
             }
         }
     }
@@ -426,14 +525,17 @@ class Interpreter {
 
    public:
     Interpreter() {
-        Reader reader;
         cout << "Our-C running ..." << endl;
         try {
             while (true) {
                 cout << "> ";
-                Token token = reader.GetNextToken();
-                cout << token.mString << " : " << token.mType << endl;
-                ;
+                vector<Token> expression;
+                instructionCollector.GetNextInstruction(expression);
+                for (int i = 0; i < expression.size(); i++) {
+                    cout << expression[i].mString << " ";
+                }
+
+                cout << endl;
             }  // while
         }      // try
         catch (const Done& e) {
